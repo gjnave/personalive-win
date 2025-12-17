@@ -1,7 +1,5 @@
-torch==2.1.0
-torchvision==0.16.0
-accelerate==1.12.0
 av==11.0.0
+accelerate==1.12.0
 decord==0.6.0
 diffusers==0.27.0
 einops==0.8.1

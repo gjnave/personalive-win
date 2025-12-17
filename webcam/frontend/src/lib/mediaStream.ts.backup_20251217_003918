@@ -1,0 +1,131 @@
+import { writable, type Writable, get } from 'svelte/store';
+
+export enum MediaStreamStatusEnum {
+    INIT = "init",
+    CONNECTED = "connected",
+    DISCONNECTED = "disconnected",
+}
+export const onFrameChangeStore: Writable<{ blob: Blob }> = writable({ blob: new Blob() });
+
+export const mediaDevices = writable<MediaDeviceInfo[]>([]);
+export const mediaStreamStatus = writable(MediaStreamStatusEnum.INIT);
+export const mediaStream = writable<MediaStream | null>(null);
+
+export const mediaStreamActions = {
+    async enumerateDevices() {
+        console.log("Enumerating media devices...");
+        await navigator.mediaDevices.enumerateDevices()
+            .then(devices => {
+                const cameras = devices.filter(device => device.kind === 'videoinput');
+                console.log("Found cameras:", cameras);
+                mediaDevices.set(cameras);
+            })
+            .catch(err => {
+                console.error("Error enumerating devices:", err);
+            });
+    },
+    async start(mediaDevicedID?: string) {
+        console.log("Attempting to start media stream...");
+        if (mediaDevicedID) {
+            console.log("Using device ID:", mediaDevicedID);
+        } else {
+            console.log("No device ID specified, using default camera.");
+        }
+
+        const constraints = {
+            audio: false,
+            video: {
+                deviceId: mediaDevicedID
+            }
+        };
+        console.log("Using constraints:", JSON.stringify(constraints, null, 2));
+
+        await navigator.mediaDevices
+            .getUserMedia(constraints)
+            .then((stream) => {
+                console.log("Successfully started media stream:", stream);
+                const videoTracks = stream.getVideoTracks();
+                if (videoTracks.length > 0) {
+                    console.log("Video track settings:", videoTracks[0].getSettings());
+                }
+                mediaStreamStatus.set(MediaStreamStatusEnum.CONNECTED);
+                mediaStream.set(stream);
+            })
+            .catch((err) => {
+                console.error("Error starting media stream:", err);
+                console.error(`${err.name}: ${err.message}`);
+                mediaStreamStatus.set(MediaStreamStatusEnum.DISCONNECTED);
+                mediaStream.set(null);
+            });
+    },
+    async startScreenCapture() {
+        const displayMediaOptions = {
+            video: {
+                displaySurface: "window",
+            },
+            audio: false,
+            surfaceSwitching: "include"
+        };
+
+
+        let captureStream = null;
+
+        try {
+            captureStream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
+            const videoTrack = captureStream.getVideoTracks()[0];
+
+            console.log("Track settings:");
+            console.log(JSON.stringify(videoTrack.getSettings(), null, 2));
+            console.log("Track constraints:");
+            console.log(JSON.stringify(videoTrack.getConstraints(), null, 2));
+            mediaStreamStatus.set(MediaStreamStatusEnum.CONNECTED);
+            mediaStream.set(captureStream)
+        } catch (err) {
+            console.error(err);
+        }
+
+    },
+    async switchCamera(mediaDevicedID: string) {
+        console.log("Attempting to switch camera to device ID:", mediaDevicedID);
+        if (get(mediaStreamStatus) !== MediaStreamStatusEnum.CONNECTED) {
+            console.log("Not connected, returning.");
+            return;
+        }
+        const constraints = {
+            audio: false,
+            video: { deviceId: mediaDevicedID }
+        };
+        console.log("Using constraints for switchCamera:", JSON.stringify(constraints, null, 2));
+        await navigator.mediaDevices
+            .getUserMedia(constraints)
+            .then((stream) => {
+                console.log("Successfully switched camera:", stream);
+                const videoTracks = stream.getVideoTracks();
+                if (videoTracks.length > 0) {
+                    console.log("New video track settings:", videoTracks[0].getSettings());
+                }
+                mediaStreamStatus.set(MediaStreamStatusEnum.CONNECTED);
+                mediaStream.set(stream)
+            })
+            .catch((err) => {
+                console.error("Error switching camera:", err);
+                console.error(`${err.name}: ${err.message}`);
+            });
+    },
+    async stop() {
+        console.log("Stopping media stream.");
+        navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+            stream.getTracks().forEach((track) => track.stop());
+        });
+        mediaStreamStatus.set(MediaStreamStatusEnum.DISCONNECTED);
+        mediaStream.set(null);
+    },
+};
+
+// -----------------------------
+// 🖼 Reference Image Store
+// -----------------------------
+export const referenceImageStore: Writable<{ blob: Blob }> =
+    writable({ blob: new Blob() });
+
+export const referenceImageSent = writable(false);

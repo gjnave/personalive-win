@@ -1,0 +1,44 @@
+**Follow-up for PersonaLive Project**
+
+This document summarizes the issues encountered and the steps taken to resolve them, bringing the project to its current state.
+
+**1. Initial Problem: Data Type Mismatch (Solved)**
+*   **Description:** The application was crashing with a `RuntimeError: expected mat1 and mat2 to have the same dtype, but got: float != c10::Half`. This indicated a mismatch between the model's expected input precision (half-precision/fp16) and the provided input data (single-precision/float32).
+*   **Cause:** In `src/pipelines/pipeline_pose2vid.py`, the `timestep` argument passed to `self.reference_unet` was hardcoded to `torch.float32`, while the model itself was operating in `fp16`.
+*   **Resolution:** Modified `src/pipelines/pipeline_pose2vid.py` to change the `dtype` of the `timestep` tensor from `torch.float32` to `self.reference_unet.dtype`, ensuring consistency with the model's precision.
+
+**2. Second Problem: CUDA CUBLAS Internal Error (Solved)**
+*   **Description:** A `RuntimeError: CUDA error: CUBLAS_STATUS_INTERNAL_ERROR` occurred when the "fuse reference" button was pressed, specifically within the `CLIPVisionModelWithProjection` (`image_encoder`).
+*   **Cause Analysis & Attempts:**
+    *   **Attempt 1:** Initially suspected `gradient_checkpointing` in `src/wrapper_trt.py` as a potential conflict and disabled it. This did not resolve the error.
+    *   **Attempt 2 (Successful):** The error suggested a deeper interaction issue with `fp16` precision in the `image_encoder`. The solution was to force the `image_encoder` to operate in `torch.float32` for stability, and then cast its output back to the pipeline's configured `dtype` (`fp16`) before passing it to subsequent models, particularly the TensorRT engine.
+*   **Resolution:**
+    *   In `src/wrapper_trt.py`, changed the `image_encoder` initialization to `image_encoder.to(device=self.device, dtype=torch.float32)`.
+    *   In `src/wrapper_trt.py`'s `fuse_reference` method, modified the `encoder_hidden_states` creation to `encoder_hidden_states = clip_image_embeds.unsqueeze(1).to(dtype=self.dtype)`.
+
+**3. Third Problem: Webcam Not Starting (`NotReadableError`) (Solved)**
+*   **Description:** After resolving the CUDA error, the webcam failed to start with a `NotReadableError: Could not start video source`. This typically indicates issues with camera access permissions or overly restrictive video constraints. The user is running on WSL.
+*   **Cause Analysis & Attempts:**
+    *   **Attempt 1:** Initially, `getUserMedia` constraints in `webcam/frontend/src/lib/mediaStream.ts` were `width: 512, height: 512`. These were made less strict by changing them to `width: { ideal: 512 }, height: { ideal: 512 }`. This did not resolve the issue.
+    *   **Attempt 2 (Successful):** Further debugging revealed that `mediaStreamActions.start()` in `webcam/frontend/src/routes/+page.svelte` was being called without a `deviceId`, causing the browser to select a potentially unavailable default camera.
+*   **Resolution:**
+    *   In `webcam/frontend/src/routes/+page.svelte`, modified the `toggleLcmLive` function to:
+        *   Import `get` from `svelte/store` and `mediaDevices` from `$lib/mediaStream`.
+        *   After `mediaStreamActions.enumerateDevices()`, explicitly retrieve the `deviceId` of the *first* available camera from `$mediaDevices`.
+        *   Pass this specific `deviceId` to `mediaStreamActions.start(devices[0].deviceId)`.
+    *   Also, as a further measure, in `webcam/frontend/src/lib/mediaStream.ts`, the `getUserMedia` constraints were made even less restrictive by removing `width` and `height` constraints entirely, leaving only `deviceId`.
+
+**4. Current Problem: "Faceswap Function Not Working" (Under Investigation)**
+*   **Description:** The camera is now working, but the core "faceswap" (live portrait animation) functionality is not producing the expected output. The user indicated that they built the TensorRT engine (`unet_work(H100).engine`) on their own RTX 4090 GPU, so a GPU mismatch is *not* considered the primary cause.
+*   **Current State:** To diagnose the "faceswap" issue, extensive debugging logs have been added to the `process_input` function in `src/wrapper_trt.py`. These logs will output the shapes, data types, device, and min/max values of key intermediate tensors and the inputs/outputs of the TensorRT engine (`self.unet_work`).
+*   **Next Step:** The user needs to run the application again and provide the new logs from the Python terminal. These logs are crucial for understanding where the data flow might be breaking down within the animation pipeline.
+
+**Files Modified:**
+*   `src/pipelines/pipeline_pose2vid.py`
+*   `src/wrapper_trt.py`
+*   `webcam/frontend/src/lib/mediaStream.ts`
+*   `webcam/frontend/src/routes/+page.svelte`
+
+**Git Branch:** `feature/fix-cuda-error` contains the committed changes.
+
+The current debugging logs in `src/wrapper_trt.py` are designed to provide granular insight into the TensorRT engine's operation. Once these logs are obtained, we can analyze the state of the tensors at each critical step to identify anomalies.

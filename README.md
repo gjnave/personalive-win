@@ -86,26 +86,43 @@ python inference_offline.py
 ```
 ### 📸 Online Inference
 #### 📦 Setup Web UI
-```
+
+**For Linux/macOS:**
+```bash
 # install Node.js 18+
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
 nvm install 18
 
 cd webcam
-source start.sh
+bash start.sh
 ```
+
+**For Windows:**
+
+1.  **Install Dependencies:**
+    -   Install Python 3.10 and PyTorch 2.1.0+cu121 by following the official instructions.
+    -   Install Node.js 18+ from the [official website](https://nodejs.org/) and ensure `npm` is in your system's PATH.
+
+2.  **Set Up the Backend:**
+    -   Open a terminal and navigate to the project's root directory.
+    -   Run `pip install -r requirements.txt` to install the required Python packages.
+
+3.  **Launch the Application:**
+    -   In the same terminal, navigate to the `webcam` directory (`cd webcam`).
+    -   Run `call start.bat`. This will build the frontend and start the backend server.
+    -   Open your browser and go to `http://localhost:7860`.
 
 #### 🏎️ Acceleration (Optional)
 Converting the model to TensorRT can significantly speed up inference (~ 2x ⚡️). Building the engine may take about `20 minutes` depending on your device. Note that TensorRT optimizations may lead to slight variations or a small drop in output quality.
+
+**Note for Windows Users:**
+- The `pycuda` and `tensorrt` libraries can be challenging to install on Windows. Please refer to their official documentation for detailed installation instructions.
+- Ensure you have a compatible NVIDIA driver and CUDA Toolkit installed before attempting to install these packages.
+
 ```
 python torch2trt.py
 ```
 
-#### ▶️ Start Streaming
-```
-python inference_online.py
-```
-then open `http://0.0.0.0:7860` in your browser. (*If `http://0.0.0.0:7860` does not work well, try `http://localhost:7860`)
 
 ## 📋 Citation
 If you find PersonaLive useful for your research, welcome to 🌟 this repo and cite our work using the following BibTeX:
